@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Draw ROI on Image</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <h1>Draw Region of Interest on Image</h1>
+    </header>
+    <div id="container">
+        <input type="file" id="imageLoader" name="imageLoader" accept="image/*"/>
+        <canvas id="drawingCanvas"></canvas>
+        <button id="validateButton">Validate Coordinates</button>
+        <div id="result"></div>
+    </div>
+    <script>
+        const canvas = document.getElementById('drawingCanvas');
+        const ctx = canvas.getContext('2d');
+        const imageLoader = document.getElementById('imageLoader');
+        const validateButton = document.getElementById('validateButton');
+        const resultDiv = document.getElementById('result');
+        let img = new Image();
+        let imgFile = null;
+
+        let points = [];
+        let draggingPoint = -1;
+
+        function drawPolygon() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            if (points.length > 0) {
+                ctx.beginPath();
+                ctx.moveTo(points[0].x, points[0].y);
+                for (let i = 1; i < points.length; i++) {
+                    ctx.lineTo(points[i].x, points[i].y);
+                }
+                ctx.closePath();
+                ctx.strokeStyle = 'red';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                points.forEach(point => {
+                    ctx.beginPath();
+                    ctx.arc(point.x, point.y, 5, 0, 2 * Math.PI);
+                    ctx.fillStyle = 'blue';
+                    ctx.fill();
+                });
+            }
+        }
+
+        function getMousePos(canvas, evt) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: (evt.clientX - rect.left) * (canvas.width / rect.width),
+                y: (evt.clientY - rect.top) * (canvas.height / rect.height)
+            };
+        }
+
+        function isPointInCircle(point, x, y) {
+            return Math.sqrt((point.x - x) ** 2 + (point.y - y) ** 2) < 5;
+        }
+
+        canvas.addEventListener('mousedown', (evt) => {
+            const mousePos = getMousePos(canvas, evt);
+            for (let i = 0; i < points.length; i++) {
+                if (isPointInCircle(points[i], mousePos.x, mousePos.y)) {
+                    draggingPoint = i;
+                    return;
+                }
+            }
+            if (points.length < 4) {
+                points.push(mousePos);
+            }
+            drawPolygon();
+        });
+
+        canvas.addEventListener('mousemove', (evt) => {
+            if (draggingPoint >= 0) {
+                const mousePos = getMousePos(canvas, evt);
+                points[draggingPoint] = mousePos;
+                drawPolygon();
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            draggingPoint = -1;
+        });
+
+        imageLoader.addEventListener('change', (e) => {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                img.onload = function() {
+                    // Adjust canvas size to match the uploaded image size
+                    const aspectRatio = img.width / img.height;
+                    const maxWidth = 800;
+                    const maxHeight = 800;
+                    if (img.width > maxWidth || img.height > maxHeight) {
+                        if (aspectRatio > 1) {
+                            canvas.width = maxWidth;
+                            canvas.height = maxWidth / aspectRatio;
+                        } else {
+                            canvas.width = maxHeight * aspectRatio;
+                            canvas.height = maxHeight;
+                        }
+                    } else {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                    }
+                    drawPolygon();
+                };
+                img.src = event.target.result;
+                imgFile = e.target.files[0];
+            };
+            reader.readAsDataURL(e.target.files[0]);
+        });
+
+        validateButton.addEventListener('click', () => {
+            if (!imgFile) {
+                alert("Please upload an image first.");
+                return;
+            }
+            // Adjust points to the original image scale
+            const scaledPoints = points.map(p => ({
+                x: p.x * (img.width / canvas.width),
+                y: p.y * (img.height / canvas.height)
+            }));
+
+            const formData = new FormData();
+            formData.append('file', imgFile);
+            formData.append('points', JSON.stringify({ points: scaledPoints }));
+
+            fetch('/api/validate-coordinates', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.image) {
+                    const imgElement = document.createElement('img');
+                    imgElement.src = 'data:image/jpeg;base64,' + data.image;
+                    imgElement.style.maxWidth = '100%';  // Constrain the image width
+                    imgElement.style.height = 'auto';    // Maintain aspect ratio
+                    resultDiv.innerHTML = '';
+                    resultDiv.appendChild(imgElement);
+                } else {
+                    resultDiv.innerHTML = `<p>${data.message}</p>`;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        });
+    </script>
+</body>
+</html>
