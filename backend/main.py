@@ -8,6 +8,7 @@ import numpy as np
 import base64
 import logging
 from typing import List
+import os
 
 app = FastAPI()
 
@@ -56,11 +57,11 @@ async def validate_coordinates(file: UploadFile = File(...), points: str = Form(
         return JSONResponse(status_code=500, content={"message": str(e)})
 
 # Serve frontend
-app.mount("/static", StaticFiles(directory="../frontend"), name="static")
+app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 @app.get("/")
 async def read_index():
-    return FileResponse('../frontend/index.html')
+    return FileResponse('frontend/index.html')
 
 if __name__ == "__main__":
     import uvicorn

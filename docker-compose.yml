@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "${BACKEND_PORT}:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - frontend
+
+  frontend:
+    build:
+      context: ./backend/frontend
+    # dockerfile: Dockerfile
+    ports:
+      - "${FRONTEND_PORT}:80"
+    env_file:
+      - .env
+    volumes:
+      - ./backend/frontend:/usr/share/nginx/html
